@@ -211,8 +211,9 @@ public class MovieAnalyzerLocalTest {
                     .replace("\r", "").strip();
             Map<List<String>, Integer> expectedMap = stringToMap(expected);
             assertEquals(expectedMap.size(), resMap.size());
-            for (Map.Entry<List<String>, Integer> entry : resMap.entrySet()) {
-                Integer integer = expectedMap.get(entry.getKey());
+            System.out.println(expectedMap.size() + "  " + resMap.size());
+            for (Map.Entry<List<String>, Integer> entry : expectedMap.entrySet()) {
+                Integer integer = resMap.get(entry.getKey());
                 assertEquals(integer, entry.getValue());
             }
         } catch (NoSuchMethodException | IllegalAccessException |
