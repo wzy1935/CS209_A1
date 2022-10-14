@@ -13,7 +13,7 @@ public class MovieAnalyzer {
     //test
     public static void main(String[] args) {
         MovieAnalyzer ma = new MovieAnalyzer("resources/imdb_top_500.csv");
-        var tmp = ma.getCoStarCount();
+        var tmp = ma.getTopStars(50, "gross");
         System.out.println(tmp);
     }
 
@@ -94,20 +94,39 @@ public class MovieAnalyzer {
                         i -> i,
                         Collectors.summingInt(e -> 1)
                 ));
-        System.out.println(t);
         return t;
     }
 
-    public List<String> getTopMovies(int top_k, String by) {
-        return null;
+    public List<String> getTopMovies(int topK, String by) {
+        var t = movies.stream().sorted(
+            by.equals("runtime") ?
+                    Comparator.comparing((Function<Movie, Integer>) movie -> movie.runtime).reversed().
+                            thenComparing(movie -> movie.seriesTitle)
+                    :
+                    Comparator.comparing((Function<Movie, Integer>) movie -> movie.overview.length()).reversed().
+                            thenComparing(movie -> movie.seriesTitle)
+        )
+                .limit(topK).map(m -> m.seriesTitle).collect(Collectors.toList());
+        return t;
     }
 
-    public List<String> getTopStars(int top_k, String by) {
-        return null;
+    public List<String> getTopStars(int topK, String by) {
+        var t = movies.stream()
+                .filter(m -> by.equals("rating") ? m.IMDBRating != null : m.gross != null)
+                .flatMap(movie -> movie.stars.stream().map(s -> new Utils.Pair<>(s, movie)))
+                .collect(Collectors.groupingBy(p -> p.first)).entrySet().stream().sorted(
+                        Map.Entry.<String, List<Utils.Pair<String, Movie>>>comparingByValue(
+                                Comparator.< List<Utils.Pair<String, Movie>>, Double>comparing(l -> l.stream().mapToDouble(p -> by.equals("rating") ? p.second.IMDBRating : p.second.gross).average().orElse(0)).reversed()
+                        ).thenComparing(Map.Entry.comparingByKey())
+                ).map(Map.Entry::getKey).limit(topK).collect(Collectors.toList());
+        return t;
     }
 
-    public List<String> searchMovies(String genre, float min_rating, int max_runtime) {
-        return null;
+    public List<String> searchMovies(String genre, float minRating, int maxRuntime) {
+        var t = movies.stream()
+                .filter(m -> m.genre.contains(genre) && m.IMDBRating >= minRating && m.runtime <= maxRuntime)
+                .map(m -> m.seriesTitle).sorted().collect(Collectors.toList());
+        return t;
     }
 
     static class Movie {
@@ -123,9 +142,25 @@ public class MovieAnalyzer {
         public List<String> stars;
         public Long numOfVotes;
         public Long gross;
+
+        @Override
+        public String toString() {
+            return seriesTitle + " " + overview.length();
+        }
     }
 
     static class Utils {
+
+        static class Pair<S, T> {
+            public S first;
+            public T second;
+
+            public Pair(S first, T second) {
+                this.first = first;
+                this.second = second;
+            }
+        }
+
         public static Integer parseInt(String s) {
             try {
                 return Integer.parseInt(s);
@@ -157,22 +192,16 @@ public class MovieAnalyzer {
                 while (s.hasNextLine()) {
                     List<String> thisLine = new ArrayList<>();
                     String line = s.nextLine();
+                    if (line.contains("Indiana Jones and the Last Crusade")) {
+                        System.out.println();
+                    }
 
                     // work with one line
                     boolean inQuote = false;
-                    boolean tran = false;
+                    boolean doubleQuote = false;
                     StringBuilder sb = new StringBuilder();
                     for (int i = 0; i < line.length(); i++) {
                         char c = line.charAt(i);
-                        if (tran) {
-                            tran = false;
-                            sb.append(c);
-                            continue;
-                        }
-                        if (c == '\\') {
-                            tran = true;
-                            continue;
-                        }
                         if (c == ',') {
                             if (inQuote) {
                                 sb.append(c);
@@ -183,7 +212,18 @@ public class MovieAnalyzer {
                             continue;
                         }
                         if (c == '"') {
-                            inQuote = !inQuote;
+                            if (inQuote) {
+                                if (doubleQuote) { // second quote
+                                    doubleQuote = false;
+                                    sb.append("\"\"");
+                                } else if (i != line.length()-1 && line.charAt(i+1) == '"') { // first quote
+                                    doubleQuote = true;
+                                } else {
+                                    inQuote = false;
+                                }
+                            } else {
+                                inQuote = true;
+                            }
                             continue;
                         }
                         sb.append(c);
